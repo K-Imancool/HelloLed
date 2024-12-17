@@ -1,4 +1,5 @@
 QT       += core gui
+QT       += serialport
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -23,11 +24,17 @@ CONFIG += disable-desktop
 QT_QPA_ENABLE_TERMINAL_KEYBOARD = 0
 
 SOURCES += \
+    LoggingCategories.cpp \
+    linkstm.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    uartconnect.cpp
 
 HEADERS += \
-    mainwindow.h
+    LoggingCategories.h \
+    linkstm.h \
+    mainwindow.h \
+    uartconnect.h
 
 FORMS += \
     mainwindow.ui

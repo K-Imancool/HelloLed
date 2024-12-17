@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QProcess>
 #include <QTimer>
+#include "uartconnect.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -29,9 +30,26 @@ private slots:
 
     void changed(const QString& fileName);
 
+    void on_buttonDebug_clicked();
+
+    void on_buttonInfo_clicked();
+
+    void on_buttonWarning_clicked();
+
+    void on_buttonCritical_clicked();
+
+    void on_btnTx_clicked();
+
+    void testDisplay();
+
+public slots:
+    void displayRxData();
+
 private:
     Ui::MainWindow *ui;
     QFile *fileGpio;
     QFileSystemWatcher *fileWatcher;
+    UartConnect* uart;
+    QByteArray txPacket;
 };
 #endif // MAINWINDOW_H
