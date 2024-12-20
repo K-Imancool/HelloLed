@@ -7,7 +7,9 @@
 #include <QFile>
 #include <QProcess>
 #include <QTimer>
-#include "uartconnect.h"
+#include <QFileSystemModel>
+#include <QThread>
+#include "linkstm.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -40,7 +42,13 @@ private slots:
 
     void on_btnTx_clicked();
 
-    void testDisplay();
+    void testDisplay(LinkStm::UartRx rxData);
+
+    void displayUartError(LinkStm::UartState errorState);
+
+    void on_listView_doubleClicked(const QModelIndex &index);
+
+    void on_listView_clicked(const QModelIndex &index);
 
 public slots:
     void displayRxData();
@@ -51,5 +59,8 @@ private:
     QFileSystemWatcher *fileWatcher;
     UartConnect* uart;
     QByteArray txPacket;
+    QFileSystemModel *fileModel;
+    const QString STM_PROJECTS_DIR = "/home/kikorik/stm32Soft";
+    QThread *uartThread;
 };
 #endif // MAINWINDOW_H

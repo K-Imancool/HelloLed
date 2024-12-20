@@ -1,29 +1,47 @@
 #include "linkstm.h"
 
 LinkStm::LinkStm(QObject *parent)
-    : QObject{parent}
+    : QObject{parent},
+    m_newCommand(NoTxCommand),
+    m_sendCommand(NoTxCommand),
+    m_rxCom(NoRxCommand)
 {
-
+    // Создаём поток для обработки uart
+    m_uartThread = new QThread(this);
+    // Инициализация uart
+    m_uart = new UartConnect(this, "ttys3", QSerialPort::Baud57600);
+    // Передаём объект в поток
+    m_uart->moveToThread(m_uartThread);
+    // Правильное удаление
+    connect(m_uartThread, &QThread::finished, m_uart, &UartConnect::deleteLater);
+    // Запуск потока
+    m_uartThread->start();
+    // Таймер обмена по uart
+    m_uartTimer = new QTimer(this);
+    connect(m_uartTimer, &QTimer::timeout, [this]() {sendCommand();});
+    m_uartTimer->start(1000);
 }
 
-QByteArray LinkStm::packTxCommand(quint8 command, QByteArray* data)
+QByteArray LinkStm::packTxCommand(UartTx* txCom)
 {
     QByteArray buffer;
     QByteArray packet;
     quint16 crc;
     quint8 i;
 
+    // Заполняем буфер: длина, команда, данные, crc
     buffer.resize(MAX_PACKET_LEN);
-    buffer[0] = data->length() + 4;
-    buffer[1] = command;
-    for (i = 0; i < data->length(); i++) {
-        buffer[i+2] = data->at(i);
+    buffer[0] = txCom->data.length() + 4;
+    buffer[1] = txCom->com;
+    for (i = 0; i < txCom->data.length(); i++) {
+        buffer[i+2] = txCom->data.at(i);
     }
     i += 2;
-    crc = calculateCrc16(&buffer, data->length() + 2);
+    crc = calculateCrc16(&buffer, txCom->data.length() + 2);
     buffer[i++] = (quint8) (crc >> 8);
     buffer[i++] = (quint8) (crc && 0xFF);
 
+    // Организуем байт-стаффинг, когда FRAME_START всегда начало посылки
     packet.append(FRAME_START);
     quint8 k = 1;
     for (quint8 j = 0; j < i; j++) {
@@ -34,6 +52,67 @@ QByteArray LinkStm::packTxCommand(quint8 command, QByteArray* data)
         else packet.append(buffer.at(j));
     }
 
+    return packet;
+}
+
+QString LinkStm::getHexStr(QByteArray byteArray)
+{
+    QString outStr;
+    for (int i = 0; i < byteArray.size(); i++) {
+        QString num = QString::number(byteArray.at(i), 16);
+        if (num.length() < 2) outStr.append("0x0");
+        else outStr.append("0x");
+        outStr.append(num).append(" ");
+    }
+    return outStr;
+}
+
+LinkStm::UartState LinkStm::unpackRxCommand(QByteArray *rxPacket)
+{
+    if (rxPacket->at(0) != FRAME_START)
+        return STATE_RX_ERR;
+
+}
+
+void LinkStm::sendCommand()
+{
+    QByteArray buffer;
+    QByteArray packet;
+    TxCommand command;
+    if (m_txCommand.com == NoTxCommand ||
+        m_txCommand.com == Allright) {
+        command = Allright;
+    }
+    else {
+        command = m_txCommand.com;
+        buffer = m_txCommand.data;
+    }
+    *m_txPacket = packTxCommand(command, &buffer);
+    UartConnect::ConnectResult connectResult;
+    connectResult = m_uart->writeAndRead(m_txPacket, m_rxPacket);
+    switch (connectResult) {
+    case UartConnect::CONNECT_ACK:
+        m_state = STATE_OK;
+        break;
+    case UartConnect::CONNECT_NO:
+        m_state = STATE_NO_RX;
+        emit error(m_state);
+        break;
+    case UartConnect::CONNECT_TX_ERR:
+        m_state = STATE_TX_ERR;
+        emit error(m_state);
+        break;
+    case UartConnect::CONNECT_DATA:
+        m_state = STATE_OK;
+        m_rxCommand = unpackRxCommand(m_rxPacket);
+        emit recieveData(&m_rxCommand);
+        break;
+    default:
+        break;
+    }
+
+    m_newCommand = Allright;      // Команда по умолчанию
+    m_sendCommand = command;      // Отправленная команда
 }
 
 quint16 LinkStm::calculateCrc16(QByteArray *buffer, quint8 len)
@@ -78,4 +157,34 @@ quint16 LinkStm::calculateCrc16(QByteArray *buffer, quint8 len)
         crc = (crc << 8) ^ crc16Table[(crc >> 8) ^  buffer->at(i++)];
     }
     return crc;													// Если данные были с CRC, на выходе должен быть 0
+}
+
+const UartRx &LinkStm::rxCommand() const
+{
+    return m_rxCommand;
+}
+
+void LinkStm::setTxCommand(const UartTx &newTxCommand)
+{
+    m_txCommand = newTxCommand;
+}
+
+const UartState &LinkStm::state() const
+{
+    return m_state;
+}
+
+void LinkStm::setTxData(QByteArray *newTxData)
+{
+    m_txData = newTxData;
+}
+
+LinkStm::TxCommand LinkStm::getLastCommand() const
+{
+    return m_newCommand;
+}
+
+void LinkStm::setCommand(const TxCommand &command)
+{
+    m_newCommand = command;
 }

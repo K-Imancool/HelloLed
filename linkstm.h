@@ -2,6 +2,9 @@
 #define LINKSTM_H
 
 #include <QObject>
+#include <QTimer>
+#include <QThread>
+#include "uartconnect.h"
 
 class LinkStm : public QObject
 {
@@ -28,14 +31,46 @@ public:
     };
     Q_ENUM(RxCommand);
 
-    struct UartCommand {
-        quint8 com;
+    enum UartState : quint8 {
+        STATE_OK = 0,
+        STATE_TX_ERR,                   // Ошибка передачи
+        STATE_NO_RX,                   // Приёмник не отвечает
+        STATE_RX_ERR,                   // Приёмник отвечает не то, что нужно
+    };
+    Q_ENUM(UartState);
+
+    struct UartTx {
+        TxCommand com;
         QByteArray data;
     };
 
-    QByteArray packTxCommand(quint8 command, QByteArray* data); // Подготовка передачи команды
+    struct UartRx {
+        RxCommand com;
+        QByteArray data;
+    };
+     // Подготовка передачи команды
+    QByteArray packTxCommand(UartTx* txCom);
+    // Получить строку с шестнадцатиричными данными
+    static QString getHexStr(QByteArray byteArray);
+    // Расшифровка команды
+    UartState unpackRxCommand(QByteArray* rxPacket);
+
+    TxCommand getLastCommand() const;
+
+    const UartState &state() const;
+
+    void setTxCommand(const UartTx &newTxCommand);
+
+    const UartRx &rxCommand() const;
 
 signals:
+//    void txError();
+//    void rxError();
+    void recieveData(UartRx* rxData);
+    void error(UartState errorState);
+
+private slots:
+    void sendCommand();
 
 private:
     quint16 calculateCrc16(QByteArray* buffer, quint8 len); // Вычисление контрольной суммы
@@ -45,12 +80,14 @@ private:
     static const quint8 FRAME_XOR_CHAR = 0x20;
 
 private:
-    QByteArray* txPacket;
-    QByteArray* rxPacket;
-    TxCommand txCom = NoTxCommand;
-    RxCommand rxCom = NoRxCommand;
-    QByteArray* txData;
-    QByteArray* rxData;
+    QByteArray* m_txPacket;
+    QByteArray* m_rxPacket;
+    QTimer* m_uartTimer;
+    UartConnect* m_uart;
+    QThread* m_uartThread;
+    UartState m_state;
+    UartTx m_txCommand;
+    UartRx m_rxCommand;
 };
 
 #endif // LINKSTM_H
